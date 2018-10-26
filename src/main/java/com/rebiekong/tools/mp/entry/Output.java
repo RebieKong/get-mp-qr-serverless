@@ -11,7 +11,7 @@ public class Output {
     public Map<String, String> headers = new HashMap<>();
     public String body = "";
 
-    public String toString(){
+    public String toString() {
         return JSON.toJSONString(this);
     }
 
@@ -37,6 +37,13 @@ public class Output {
 
     public void setHeaders(Map<String, String> headers) {
         this.headers = headers;
+    }
+
+    public void addHeader(String key, String value) {
+        if (headers == null) {
+            headers = new HashMap<>();
+        }
+        headers.put(key, value);
     }
 
     public String getBody() {

@@ -3,9 +3,10 @@ package com.rebiekong.tools.mp.lc;
 import com.alibaba.fastjson.JSON;
 import com.aliyun.fc.runtime.Context;
 import com.aliyun.fc.runtime.StreamRequestHandler;
+import com.rebiekong.tools.mp.entry.Event;
 import com.rebiekong.tools.mp.entry.Output;
 import com.rebiekong.tools.mp.entry.QRRequest;
-import com.rebiekong.tools.mp.entry.Event;
+import com.rebiekong.tools.mp.entry.wx.Error;
 import sun.misc.BASE64Encoder;
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
@@ -15,25 +16,28 @@ import java.net.URL;
 
 public class QrCreator implements StreamRequestHandler {
 
-    private static final int readQRBuffSize = 4096;
+    private static final int byteReadBuffSize = 4096;
+    private Context context;
+
+    private byte[] readIS(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream data = new ByteArrayOutputStream();
+        byte[] buf = new byte[QrCreator.byteReadBuffSize];
+        int length;
+        while ((length = inputStream.read(buf, 0, buf.length)) != -1) {
+            data.write(buf, 0, length);
+        }
+        return data.toByteArray();
+    }
 
     @Override
     public void handleRequest(InputStream input, OutputStream output, Context context) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(input));
-        String line;
-        while ((line = bufferedReader.readLine()) != null) {
-            sb.append(line);
-        }
-        Event event = JSON.parseObject(sb.toString(), Event.class);
-        Output outputBean = new Output();
+        this.context = context;
+        Event event = JSON.parseObject(new String(readIS(input)), Event.class);
+
         String scene = event.pathParameters.get("scene_png").split("\\.")[0];
         String path = event.queryParameters.get("path");
 
-        String body = new BASE64Encoder().encode(getSceneQR(path, scene));
-        outputBean.setStatusCode(200);
-        outputBean.setBody(body);
-        outputBean.setBase64Encoded(true);
+        Output outputBean = getSceneQR(path, scene);
         output.write(JSON.toJSONString(outputBean).getBytes());
     }
 
@@ -42,11 +46,12 @@ public class QrCreator implements StreamRequestHandler {
         throw new NotImplementedException();
     }
 
-    private byte[] getSceneQR(String path, String scene) throws IOException {
+    private Output getSceneQR(String path, String scene) throws IOException {
         return getSceneQR(path, scene, true, 500);
     }
 
-    private byte[] getSceneQR(String path, String scene, boolean autoColor, int width) throws IOException {
+    private Output getSceneQR(String path, String scene, boolean autoColor, int width) throws IOException {
+        Output outputBean = new Output();
         URL uri = new URL("https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=" + getAT());
         HttpURLConnection connection = (HttpURLConnection) uri.openConnection();
         connection.setDoInput(true);
@@ -63,13 +68,20 @@ public class QrCreator implements StreamRequestHandler {
         out.writeBytes(JSON.toJSONString(qrRequest));
         out.flush();
         out.close();
-        ByteArrayOutputStream data = new ByteArrayOutputStream();
-        InputStream in = connection.getInputStream();
-        byte[] buf = new byte[QrCreator.readQRBuffSize];
-        int length;
-        while ((length = in.read(buf, 0, buf.length)) != -1) {
-            data.write(buf, 0, length);
+        byte[] data = readIS(connection.getInputStream());
+        if (connection.getHeaderField("Content-Type").equals("application/json; charset=UTF-8")) {
+            Error error = JSON.parseObject(new String(data), Error.class);
+            outputBean.setStatusCode(502);
+            outputBean.setBody(JSON.toJSONString(error));
+            outputBean.setBase64Encoded(false);
+            outputBean.addHeader("Content-Type", "application/json; charset=UTF-8");
+        } else {
+            String body = new BASE64Encoder().encode(data);
+            outputBean.setStatusCode(200);
+            outputBean.setBody(body);
+            outputBean.setBase64Encoded(true);
+            outputBean.addHeader("Content-Type", connection.getHeaderField("Content-Type"));
         }
-        return data.toByteArray();
+        return outputBean;
     }
 }

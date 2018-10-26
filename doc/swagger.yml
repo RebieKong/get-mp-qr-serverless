@@ -1,0 +1,40 @@
+swagger: '2.0'
+basePath: /mp
+info:
+  version: '1.0'
+  title: Get QR API
+schemes:
+- http
+paths:
+  '/qr/{scene_png}':
+    get:
+      operationId: getQR
+      schemes:
+      - http
+      x-aliyun-apigateway-paramater-handling: MAPPING
+      x-aliyun-apigateway-auth-type: ANONYMOUS
+      x-aliyun-apigateway-backend:
+        type: FC
+        fcRegion: ##AWAIT##
+        serviceName: ##AWAIT##
+        functionName: ##AWAIT##
+        arn: ##AWAIT##
+      parameters:
+      - name: scene_png
+        in: path
+        x-aliyun-apigateway-required: true
+        type: string
+        pattern: '.{1,32}\.png'
+        x-aliyun-apigateway-backend-location: path
+        x-aliyun-apigateway-backend-name: scene_png
+      - name: path
+        in: query
+        required: true
+        type: string
+        x-aliyun-apigateway-backend-location: query
+        x-aliyun-apigateway-backend-name: path
+      responses:
+        '200':
+          description: ok
+        '500':
+          description: 上游服务器异常
